@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoComet - Ride Hailing</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .animate-pulse-slow {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .status-badge {
+            transition: all 0.3s ease;
+        }
+        #map {
+            height: 400px;
+            border-radius: 12px;
+        }
+        .card {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        .driver-marker {
+            background: #3b82f6;
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 flex items-center gap-3">
+                <span class="text-5xl">🚗</span>
+                GoComet
+            </h1>
+            <p class="text-gray-600 mt-2">Real-time Ride Hailing Platform</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Left Panel: Booking & Status -->
+            <div class="space-y-6">
+                <!-- Create User/Driver Section -->
+                <div class="card rounded-xl shadow-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">Quick Setup</h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <button onclick="createTestUser()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-lg font-medium transition-colors">
+                            Create Test User
+                        </button>
+                        <button onclick="createTestDriver()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-lg font-medium transition-colors">
+                            Create Test Driver
+                        </button>
+                    </div>
+                    <div id="setup-status" class="mt-4 text-sm text-gray-600"></div>
+                </div>
+
+                <!-- Book Ride Section -->
+                <div class="card rounded-xl shadow-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">Book a Ride</h2>
+                    <form id="booking-form" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">User ID</label>
+                            <input type="text" id="user-id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter user ID">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Pickup</label>
+                                <input type="text" id="pickup" value="MG Road, Bangalore" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Dropoff</label>
+                                <input type="text" id="dropoff" value="Koramangala" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>
+                                <select id="vehicle-type" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    <option value="auto">Auto (₹12/km)</option>
+                                    <option value="mini">Mini (₹14/km)</option>
+                                    <option value="sedan" selected>Sedan (₹17/km)</option>
+                                    <option value="suv">SUV (₹22/km)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Payment</label>
+                                <select id="payment-method" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    <option value="cash">Cash</option>
+                                    <option value="wallet" selected>Wallet</option>
+                                    <option value="card">Card</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-semibold transition-colors">
+                            Book Ride
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Ride Status -->
+                <div id="ride-status" class="card rounded-xl shadow-lg p-6 hidden">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">Ride Status</h2>
+                        <span id="status-badge" class="status-badge px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                            Pending
+                        </span>
+                    </div>
+                    <div id="ride-details" class="space-y-3">
+                        <!-- Ride details will be populated here -->
+                    </div>
+                    <div id="ride-actions" class="mt-4 space-x-2 hidden">
+                        <button onclick="cancelRide()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm">
+                            Cancel Ride
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Driver Panel -->
+                <div id="driver-panel" class="card rounded-xl shadow-lg p-6 hidden">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">Driver Actions</h2>
+                    <div id="driver-info" class="mb-4 text-sm text-gray-600"></div>
+                    <div class="space-y-3">
+                        <button onclick="simulateDriverLocation()" class="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
+                            Simulate Location Updates
+                        </button>
+                        <button onclick="acceptRide()" id="accept-btn" class="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg hidden">
+                            Accept Ride
+                        </button>
+                        <button onclick="updateRideStatus('driver_arrived')" id="arrived-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg hidden">
+                            Mark as Arrived
+                        </button>
+                        <button onclick="startTrip()" id="start-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg hidden">
+                            Start Trip
+                        </button>
+                        <button onclick="endTrip()" id="end-btn" class="w-full bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg hidden">
+                            End Trip
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Payment Section -->
+                <div id="payment-section" class="card rounded-xl shadow-lg p-6 hidden">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">Payment</h2>
+                    <div id="fare-breakdown" class="space-y-2 mb-4">
+                        <!-- Fare details -->
+                    </div>
+                    <button onclick="processPayment()" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold">
+                        Pay Now
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Map & Live Updates -->
+            <div class="space-y-6">
+                <!-- Map -->
+                <div class="card rounded-xl shadow-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">Live Tracking</h2>
+                    <div id="map"></div>
+                </div>
+
+                <!-- Live Updates Log -->
+                <div class="card rounded-xl shadow-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">Live Updates</h2>
+                    <div id="live-updates" class="h-64 overflow-y-auto space-y-2 font-mono text-sm">
+                        <div class="text-gray-500">Waiting for updates...</div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="card rounded-xl shadow-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">System Stats</h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-blue-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-blue-600" id="stat-users">-</div>
+                            <div class="text-sm text-gray-600">Users</div>
+                        </div>
+                        <div class="bg-green-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-green-600" id="stat-drivers">-</div>
+                            <div class="text-sm text-gray-600">Drivers</div>
+                        </div>
+                        <div class="bg-purple-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-purple-600" id="stat-rides">-</div>
+                            <div class="text-sm text-gray-600">Rides</div>
+                        </div>
+                        <div class="bg-orange-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-orange-600" id="stat-trips">-</div>
+                            <div class="text-sm text-gray-600">Trips</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/v1';
+        let currentRide = null;
+        let currentDriver = null;
+        let currentUser = null;
+        let currentTrip = null;
+        let currentOffer = null;
+        let map = null;
+        let driverMarker = null;
+        let pickupMarker = null;
+        let dropoffMarker = null;
+        let eventSource = null;
+        let locationInterval = null;
+
+        // Bangalore coordinates
+        const BANGALORE = { lat: 12.9716, lng: 77.5946 };
+
+        // Initialize map
+        function initMap() {
+            map = L.map('map').setView([BANGALORE.lat, BANGALORE.lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            loadStats();
+        });
+
+        // Create test user
+        async function createTestUser() {
+            const phone = '98' + Math.floor(Math.random() * 100000000).toString().padStart(8, '0');
+            const res = await fetch(`${API_BASE}/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phone: phone,
+                    name: 'Test User ' + Math.floor(Math.random() * 1000)
+                })
+            });
+            const user = await res.json();
+            currentUser = user;
+            document.getElementById('user-id').value = user.id;
+            document.getElementById('setup-status').innerHTML = `
+                <span class="text-green-600">✓ User created: ${user.name} (${user.id.substring(0, 8)}...)</span>
+            `;
+            logUpdate(`User created: ${user.name}`, 'success');
+            loadStats();
+        }
+
+        // Create test driver
+        async function createTestDriver() {
+            const phone = '91' + Math.floor(Math.random() * 100000000).toString().padStart(8, '0');
+            const vehicleType = document.getElementById('vehicle-type').value;
+
+            const res = await fetch(`${API_BASE}/drivers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phone: phone,
+                    name: 'Driver ' + Math.floor(Math.random() * 1000),
+                    license_number: 'DL' + Math.floor(Math.random() * 10000000),
+                    vehicle_type: vehicleType,
+                    vehicle_number: 'KA01AB' + Math.floor(Math.random() * 10000)
+                })
+            });
+            const driver = await res.json();
+            currentDriver = driver;
+
+            // Go online
+            await fetch(`${API_BASE}/drivers/${driver.id}/online`, { method: 'POST' });
+
+            // Update location near pickup
+            const lat = BANGALORE.lat + (Math.random() - 0.5) * 0.02;
+            const lng = BANGALORE.lng + (Math.random() - 0.5) * 0.02;
+            await fetch(`${API_BASE}/drivers/${driver.id}/location`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lat, lng })
+            });
+
+            document.getElementById('setup-status').innerHTML += `
+                <br><span class="text-green-600">✓ Driver created: ${driver.name} (${vehicleType})</span>
+            `;
+            document.getElementById('driver-panel').classList.remove('hidden');
+            document.getElementById('driver-info').innerHTML = `
+                <strong>${driver.name}</strong><br>
+                ${driver.vehicle_number} • ${vehicleType.toUpperCase()}<br>
+                ID: ${driver.id.substring(0, 8)}...
+            `;
+
+            // Add driver marker
+            if (driverMarker) map.removeLayer(driverMarker);
+            driverMarker = L.circleMarker([lat, lng], {
+                radius: 10,
+                fillColor: '#3b82f6',
+                color: '#fff',
+                weight: 2,
+                fillOpacity: 1
+            }).addTo(map).bindPopup(`Driver: ${driver.name}`);
+
+            logUpdate(`Driver online: ${driver.name}`, 'success');
+            loadStats();
+        }
+
+        // Book ride
+        document.getElementById('booking-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const userId = document.getElementById('user-id').value;
+            if (!userId) {
+                alert('Please create or enter a user ID first');
+                return;
+            }
+
+            const pickupLat = BANGALORE.lat + (Math.random() - 0.5) * 0.02;
+            const pickupLng = BANGALORE.lng + (Math.random() - 0.5) * 0.02;
+            const dropoffLat = BANGALORE.lat + (Math.random() - 0.5) * 0.05;
+            const dropoffLng = BANGALORE.lng + (Math.random() - 0.5) * 0.05;
+
+            const res = await fetch(`${API_BASE}/rides`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Idempotency-Key': 'ride-' + Date.now()
+                },
+                body: JSON.stringify({
+                    user_id: userId,
+                    pickup: { lat: pickupLat, lng: pickupLng, address: document.getElementById('pickup').value },
+                    dropoff: { lat: dropoffLat, lng: dropoffLng, address: document.getElementById('dropoff').value },
+                    vehicle_type: document.getElementById('vehicle-type').value,
+                    payment_method: document.getElementById('payment-method').value
+                })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                alert('Error: ' + (err.message || 'Failed to create ride'));
+                return;
+            }
+
+            currentRide = await res.json();
+
+            // Add markers
+            if (pickupMarker) map.removeLayer(pickupMarker);
+            if (dropoffMarker) map.removeLayer(dropoffMarker);
+
+            pickupMarker = L.marker([pickupLat, pickupLng], {
+                icon: L.divIcon({ className: 'text-2xl', html: '📍' })
+            }).addTo(map).bindPopup('Pickup');
+
+            dropoffMarker = L.marker([dropoffLat, dropoffLng], {
+                icon: L.divIcon({ className: 'text-2xl', html: '🎯' })
+            }).addTo(map).bindPopup('Dropoff');
+
+            map.fitBounds([[pickupLat, pickupLng], [dropoffLat, dropoffLng]], { padding: [50, 50] });
+
+            updateRideUI();
+            logUpdate(`Ride created: ${currentRide.id.substring(0, 8)}...`, 'info');
+
+            // Check for driver offers
+            if (currentDriver) {
+                setTimeout(checkDriverOffers, 1000);
+            }
+
+            loadStats();
+        });
+
+        // Update ride UI
+        function updateRideUI() {
+            document.getElementById('ride-status').classList.remove('hidden');
+
+            const statusColors = {
+                'pending': 'bg-yellow-100 text-yellow-800',
+                'matching': 'bg-blue-100 text-blue-800',
+                'driver_assigned': 'bg-green-100 text-green-800',
+                'driver_arrived': 'bg-purple-100 text-purple-800',
+                'in_progress': 'bg-indigo-100 text-indigo-800',
+                'completed': 'bg-green-100 text-green-800',
+                'cancelled': 'bg-red-100 text-red-800'
+            };
+
+            const badge = document.getElementById('status-badge');
+            badge.className = `status-badge px-3 py-1 rounded-full text-sm font-medium ${statusColors[currentRide.status] || 'bg-gray-100'}`;
+            badge.textContent = currentRide.status.replace('_', ' ').toUpperCase();
+
+            document.getElementById('ride-details').innerHTML = `
+                <div class="flex justify-between py-2 border-b">
+                    <span class="text-gray-500">Ride ID</span>
+                    <span class="font-medium">${currentRide.id.substring(0, 8)}...</span>
+                </div>
+                <div class="flex justify-between py-2 border-b">
+                    <span class="text-gray-500">Estimated Fare</span>
+                    <span class="font-medium text-green-600">₹${currentRide.estimated_fare?.toFixed(2) || '-'}</span>
+                </div>
+                <div class="flex justify-between py-2 border-b">
+                    <span class="text-gray-500">Distance</span>
+                    <span class="font-medium">${currentRide.estimated_distance_km?.toFixed(1) || '-'} km</span>
+                </div>
+                <div class="flex justify-between py-2 border-b">
+                    <span class="text-gray-500">Duration</span>
+                    <span class="font-medium">${currentRide.estimated_duration_mins || '-'} mins</span>
+                </div>
+                ${currentRide.surge_multiplier > 1 ? `
+                <div class="flex justify-between py-2 border-b">
+                    <span class="text-gray-500">Surge</span>
+                    <span class="font-medium text-red-600">${currentRide.surge_multiplier}x</span>
+                </div>
+                ` : ''}
+            `;
+
+            // Show/hide action buttons based on status
+            document.getElementById('ride-actions').classList.toggle('hidden',
+                currentRide.status === 'completed' || currentRide.status === 'cancelled');
+        }
+
+        // Check for driver offers
+        async function checkDriverOffers() {
+            if (!currentDriver) return;
+
+            const res = await fetch(`${API_BASE}/drivers/${currentDriver.id}/offers`);
+            const data = await res.json();
+
+            if (data.offers && data.offers.length > 0) {
+                currentOffer = data.offers[0];
+                document.getElementById('accept-btn').classList.remove('hidden');
+                logUpdate(`New ride offer received!`, 'info');
+            }
+        }
+
+        // Accept ride
+        async function acceptRide() {
+            if (!currentOffer || !currentDriver) return;
+
+            const res = await fetch(`${API_BASE}/drivers/${currentDriver.id}/accept`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ride_id: currentOffer.ride_id,
+                    offer_id: currentOffer.id
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                currentRide = data.ride;
+                updateRideUI();
+                document.getElementById('accept-btn').classList.add('hidden');
+                document.getElementById('arrived-btn').classList.remove('hidden');
+                logUpdate('Ride accepted! Heading to pickup...', 'success');
+
+                // Start SSE tracking
+                startTracking();
+            }
+        }
+
+        // Update ride status
+        async function updateRideStatus(status) {
+            // Directly update in DB for demo
+            currentRide.status = status;
+            updateRideUI();
+
+            if (status === 'driver_arrived') {
+                document.getElementById('arrived-btn').classList.add('hidden');
+                document.getElementById('start-btn').classList.remove('hidden');
+                logUpdate('Driver arrived at pickup', 'info');
+            }
+        }
+
+        // Start trip
+        async function startTrip() {
+            const res = await fetch(`${API_BASE}/trips/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ride_id: currentRide.id })
+            });
+
+            if (res.ok) {
+                currentTrip = await res.json();
+                currentRide.status = 'in_progress';
+                updateRideUI();
+                document.getElementById('start-btn').classList.add('hidden');
+                document.getElementById('end-btn').classList.remove('hidden');
+                logUpdate('Trip started!', 'success');
+            }
+        }
+
+        // End trip
+        async function endTrip() {
+            if (!currentTrip) return;
+
+            const res = await fetch(`${API_BASE}/trips/${currentTrip.id}/end`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    end_lat: BANGALORE.lat + 0.02,
+                    end_lng: BANGALORE.lng + 0.02,
+                    odometer_km: currentRide.estimated_distance_km
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                currentRide.status = 'completed';
+                updateRideUI();
+                document.getElementById('end-btn').classList.add('hidden');
+
+                // Show payment section
+                document.getElementById('payment-section').classList.remove('hidden');
+                document.getElementById('fare-breakdown').innerHTML = `
+                    <div class="flex justify-between py-2 border-b">
+                        <span>Base Fare</span>
+                        <span>₹${data.fare_breakdown.base_fare}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b">
+                        <span>Distance Fare</span>
+                        <span>₹${data.fare_breakdown.distance_fare}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b">
+                        <span>Time Fare</span>
+                        <span>₹${data.fare_breakdown.time_fare}</span>
+                    </div>
+                    ${data.fare_breakdown.surge_amount > 0 ? `
+                    <div class="flex justify-between py-2 border-b text-red-600">
+                        <span>Surge</span>
+                        <span>₹${data.fare_breakdown.surge_amount}</span>
+                    </div>
+                    ` : ''}
+                    <div class="flex justify-between py-2 font-bold text-lg">
+                        <span>Total</span>
+                        <span class="text-green-600">₹${data.fare_breakdown.total}</span>
+                    </div>
+                `;
+
+                logUpdate('Trip completed! Total: ₹' + data.fare_breakdown.total, 'success');
+            }
+        }
+
+        // Process payment
+        async function processPayment() {
+            if (!currentTrip) return;
+
+            const res = await fetch(`${API_BASE}/payments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    trip_id: currentTrip.id,
+                    method: document.getElementById('payment-method').value
+                })
+            });
+
+            if (res.ok) {
+                const payment = await res.json();
+                document.getElementById('payment-section').innerHTML = `
+                    <div class="text-center">
+                        <div class="text-6xl mb-4">✅</div>
+                        <h3 class="text-2xl font-bold text-green-600">Payment Successful!</h3>
+                        <p class="text-gray-600 mt-2">Transaction ID: ${payment.transaction_id}</p>
+                        <p class="text-gray-600">Amount: ₹${payment.amount}</p>
+                    </div>
+                `;
+                logUpdate('Payment completed: ₹' + payment.amount, 'success');
+                loadStats();
+            }
+        }
+
+        // Cancel ride
+        async function cancelRide() {
+            if (!currentRide) return;
+
+            const res = await fetch(`${API_BASE}/rides/${currentRide.id}/cancel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cancelled_by: 'user', reason: 'User cancelled' })
+            });
+
+            if (res.ok) {
+                currentRide.status = 'cancelled';
+                updateRideUI();
+                logUpdate('Ride cancelled', 'warning');
+            }
+        }
+
+        // Simulate driver location updates
+        function simulateDriverLocation() {
+            if (!currentDriver) {
+                alert('Please create a driver first');
+                return;
+            }
+
+            if (locationInterval) {
+                clearInterval(locationInterval);
+                locationInterval = null;
+                logUpdate('Location simulation stopped', 'info');
+                return;
+            }
+
+            let lat = BANGALORE.lat;
+            let lng = BANGALORE.lng;
+
+            locationInterval = setInterval(async () => {
+                // Move slightly
+                lat += (Math.random() - 0.5) * 0.002;
+                lng += (Math.random() - 0.5) * 0.002;
+
+                await fetch(`${API_BASE}/drivers/${currentDriver.id}/location`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lat,
+                        lng,
+                        speed: 20 + Math.random() * 30,
+                        heading: Math.random() * 360
+                    })
+                });
+
+                // Update marker
+                if (driverMarker) {
+                    driverMarker.setLatLng([lat, lng]);
+                }
+
+                logUpdate(`Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`, 'info');
+            }, 2000);
+
+            logUpdate('Location simulation started (every 2s)', 'success');
+        }
+
+        // Start SSE tracking
+        function startTracking() {
+            if (eventSource) eventSource.close();
+
+            eventSource = new EventSource(`${API_BASE}/rides/${currentRide.id}/track`);
+
+            eventSource.addEventListener('location', (e) => {
+                const data = JSON.parse(e.data);
+                logUpdate(`Driver at: ${data.lat?.toFixed(4)}, ${data.lng?.toFixed(4)}`, 'info');
+
+                if (driverMarker && data.lat && data.lng) {
+                    driverMarker.setLatLng([data.lat, data.lng]);
+                }
+            });
+
+            eventSource.addEventListener('heartbeat', () => {
+                // Heartbeat received
+            });
+
+            eventSource.onerror = () => {
+                logUpdate('Tracking connection lost', 'warning');
+            };
+        }
+
+        // Log update
+        function logUpdate(message, type = 'info') {
+            const container = document.getElementById('live-updates');
+            const colors = {
+                'info': 'text-blue-600',
+                'success': 'text-green-600',
+                'warning': 'text-yellow-600',
+                'error': 'text-red-600'
+            };
+
+            const time = new Date().toLocaleTimeString();
+            container.innerHTML = `
+                <div class="${colors[type] || 'text-gray-600'}">
+                    [${time}] ${message}
+                </div>
+            ` + container.innerHTML;
+        }
+
+        // Load stats
+        async function loadStats() {
+            // These would be actual API calls in production
+            const counts = {
+                users: '-',
+                drivers: '-',
+                rides: '-',
+                trips: '-'
+            };
+
+            document.getElementById('stat-users').textContent = counts.users;
+            document.getElementById('stat-drivers').textContent = counts.drivers;
+            document.getElementById('stat-rides').textContent = counts.rides;
+            document.getElementById('stat-trips').textContent = counts.trips;
+        }
+    </script>
+</body>
+</html>
