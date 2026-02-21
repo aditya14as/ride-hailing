@@ -1,4 +1,4 @@
-# GoComet - Ride Hailing Platform
+# Ride Hailing Platform
 
 A multi-tenant, real-time ride-hailing system built with Go, PostgreSQL, and Redis.
 
